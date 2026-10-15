@@ -1,0 +1,13 @@
+
+#include <zephyr/dt-bindings/pinctrl/stm32-pinctrl.h>
+
+/ {
+    aliases {
+        led0 = &red_led_3;
+        i2cbus = &i2c2;
+    };
+};
+
+&i2c2 {
+    status = "okay";
+};
