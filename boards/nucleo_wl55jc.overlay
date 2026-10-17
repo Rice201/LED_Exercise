@@ -1,4 +1,4 @@
-#include <zephyr/dt-bindings/pinctrl/stm32-pinctrl.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 
 / {
     leds {
@@ -6,6 +6,14 @@
 
         led_1: led_1 {
             gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>;
+        };
+
+        led_2: led_2 {
+            gpios = <&gpioc 5 GPIO_ACTIVE_HIGH>;
+        };
+
+        led_3: led_3 {
+            gpios = <&gpioc 6 GPIO_ACTIVE_HIGH>;
         };
     };
 };
