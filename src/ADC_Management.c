@@ -143,4 +143,18 @@ void ldr_read_task(void)
 
     printk("LDR ADC: %d | Percentage: %d%%\n",
            adc_value, percentage);
+
+        if(percentage <= 33){
+            gpio_pin_set_dt(&led1, 1);
+            gpio_pin_set_dt(&led2, 0);
+            gpio_pin_set_dt(&led3, 0);
+        }else if(percentage <= 66 && percentage > 33){
+            gpio_pin_set_dt(&led1, 0);
+            gpio_pin_set_dt(&led2, 1);
+            gpio_pin_set_dt(&led3, 0);
+        }else{
+            gpio_pin_set_dt(&led1, 0);
+            gpio_pin_set_dt(&led2, 0);
+            gpio_pin_set_dt(&led3, 1);
+        }
 }
