@@ -1,30 +1,35 @@
-#include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 
 / {
-    leds {
+    aliases {
+        rgb-red = &rgb_red;
+        rgb-green = &rgb_green;
+        rgb-blue = &rgb_blue;
+    };
+
+    rgb_leds {
         compatible = "gpio-leds";
 
-        led_1: led_1 {
-            gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>;
+        rgb_red: red {
+            gpios = <&gpiob 5 GPIO_ACTIVE_LOW>; /* D4 */
         };
 
-        led_2: led_2 {
-            gpios = <&gpioc 5 GPIO_ACTIVE_HIGH>;
+        rgb_green: green {
+            gpios = <&gpiob 8 GPIO_ACTIVE_LOW>; /* D5 */
         };
 
-        led_3: led_3 {
-            gpios = <&gpioc 6 GPIO_ACTIVE_HIGH>;
+        rgb_blue: blue {
+            gpios = <&gpiob 10 GPIO_ACTIVE_LOW>; /* D6 */
         };
     };
 
     zephyr,user {
-        io-channels = <&adc1 5>;
+        io-channels = <&adc1 5>; /* A0 / PB1 / ADC1_IN5 */
     };
 };
 
 &adc1 {
-    status = "okay";
     #address-cells = <1>;
     #size-cells = <0>;
 

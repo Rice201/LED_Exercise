@@ -4,17 +4,17 @@
 #include <zephyr/kernel.h>
 
 enum app_mode {
-    MODE_NORMAL,
-    MODE_BLUE,
-    MODE_OFF,
+	MODE_NORMAL,
+	MODE_BLUE,
+	MODE_OFF,
 };
 
 enum rgb_color {
-    RGB_OFF,
-    RGB_RED,
-    RGB_YELLOW,
-    RGB_GREEN,
-    RGB_BLUE,
+	RGB_OFF,
+	RGB_RED,
+	RGB_YELLOW,
+	RGB_GREEN,
+	RGB_BLUE,
 };
 
 extern enum app_mode current_mode;
@@ -24,9 +24,5 @@ extern struct k_sem brightness_wake;
 int brightness_init(void);
 int rgb_led_init(void);
 void rgb_led_set(enum rgb_color color);
-
-/* LED on and off*/
-void external_led_task(void);
-void ldr_read_task(void);
 
 #endif

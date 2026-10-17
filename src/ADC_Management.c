@@ -1,160 +1,92 @@
-#include <zephyr/kernel.h>
-#include <zephyr/device.h>
-#include <zephyr/devicetree.h>
-#include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/printk.h>
 #include <zephyr/drivers/adc.h>
+#include <zephyr/sys/printk.h>
 
-#include "../include/app.h"
+#include "app.h"
 
-#define BUTTON_NODE DT_ALIAS(sw1)
-#define LED1_NODE   DT_NODELABEL(led_1)
-#define LED2_NODE   DT_NODELABEL(led_2)
-#define LED3_NODE   DT_NODELABEL(led_3)
-#define LDR_NODE    DT_PATH(zephyr_user)
+#define SAMPLE_PERIOD_MS 2000
 
-static const struct gpio_dt_spec button =
-    GPIO_DT_SPEC_GET(BUTTON_NODE, gpios);
+static const struct adc_dt_spec adc_input =
+	ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 0);
 
-static const struct gpio_dt_spec led1 =
-    GPIO_DT_SPEC_GET(LED1_NODE, gpios);
-
-static const struct gpio_dt_spec led2 =
-    GPIO_DT_SPEC_GET(LED2_NODE, gpios);
-
-static const struct gpio_dt_spec led3 =
-    GPIO_DT_SPEC_GET(LED3_NODE, gpios);
-
-static const struct adc_dt_spec ldr =
-    ADC_DT_SPEC_GET_BY_IDX(LDR_NODE, 0);
-
-static int16_t ldr_sample;
-static int led1_state;
-static int led2_state;
-static int led3_state;
-static int previous_button;
-static int count;
-
-int rgb_led_init(void)
+int brightness_init(void)
 {
-    int ret;
-
-    if (!gpio_is_ready_dt(&button) ||
-        !gpio_is_ready_dt(&led1) ||
-        !gpio_is_ready_dt(&led2) ||
-        !gpio_is_ready_dt(&led3)) {
-        printk("GPIO device not ready\n");
-        return -ENODEV;
-    }
-
-    /* Configure button as input */
-    ret = gpio_pin_configure_dt(&button, GPIO_INPUT);
-    if (ret < 0) {
-        printk("Button configuration error: %d\n", ret);
-        return ret;
-    }
-
-    /* Configure LEDs as outputs, initially OFF */
-    ret = gpio_pin_configure_dt(&led1, GPIO_OUTPUT_INACTIVE);
-    if (ret < 0) {
-        printk("LED1 configuration error: %d\n", ret);
-        return ret;
-    }
-
-    ret = gpio_pin_configure_dt(&led2, GPIO_OUTPUT_INACTIVE);
-    if (ret < 0) {
-        printk("LED2 configuration error: %d\n", ret);
-        return ret;
-    }
-
-    ret = gpio_pin_configure_dt(&led3, GPIO_OUTPUT_INACTIVE);
-    if (ret < 0) {
-        printk("LED3 configuration error: %d\n", ret);
-        return ret;
-    }
-
-    led1_state = 0;
-    led2_state = 0;
-    led3_state = 0;
-    count = 0;
-
-    /* Read the initial button state */
-    previous_button = gpio_pin_get_dt(&button);
-    if (previous_button < 0) {
-        printk("Button read error: %d\n", previous_button);
-        return previous_button;
-    }
-
-    printk("LEDs initialized. Press B2 to change LED.\n");
-    return 0;
+	if (!adc_is_ready_dt(&adc_input)) {
+		return -ENODEV;
+	}
+	return adc_channel_setup_dt(&adc_input);
 }
 
-void external_led_task(void)
+static void brightness_thread(void *p1, void *p2, void *p3)
 {
-    int button_state = gpio_pin_get_dt(&button);
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
 
-    if (button_state < 0) {
-        printk("Button read error: %d\n", button_state);
-        return;
-    }
+	int16_t sample;
+	struct adc_sequence sequence = {
+		.buffer = &sample,
+		.buffer_size = sizeof(sample),
+	};
+	const uint32_t full_scale = BIT(adc_input.resolution) - 1U;
+	int64_t next_sample;
 
-    if (button_state && !previous_button) {
+	k_sem_take(&brightness_wake, K_FOREVER);
+	next_sample = k_uptime_get();
 
-        count = (count + 1) % 3;
+	while (1) {
+		k_mutex_lock(&mode_mutex, K_FOREVER);
+		if (current_mode != MODE_NORMAL) {
+			k_mutex_unlock(&mode_mutex);
+			k_sem_take(&brightness_wake, K_FOREVER);
+			next_sample = k_uptime_get();
+			continue;
+		}
+		if (k_uptime_get() < next_sample) {
+			k_mutex_unlock(&mode_mutex);
+			if (k_sem_take(&brightness_wake,
+				       K_TIMEOUT_ABS_MS(next_sample)) == 0) {
+				next_sample = k_uptime_get();
+			}
+			continue;
+		}
 
-        led1_state = (count == 1);
-        led2_state = (count == 2);
-        led3_state = (count == 0);
+		// Keep a completed ADC update ordered before any subsequent mode change.
+		int err = adc_sequence_init_dt(&adc_input, &sequence);
 
-        gpio_pin_set_dt(&led1, led1_state);
-        gpio_pin_set_dt(&led2, led2_state);
-        gpio_pin_set_dt(&led3, led3_state);
+		if (err == 0) {
+			err = adc_read_dt(&adc_input, &sequence);
+		}
+		if (err < 0) {
+			printk("Error: ADC acquisition (%d)\n", err);
+			rgb_led_set(RGB_OFF);
+		} else {
+			uint32_t scaled = (uint32_t)sample * 100U;
+			enum rgb_color color;
+			const char *color_name;
 
-        printk("Count: %d | LED1: %d | LED2: %d | LED3: %d\n",
-               count, led1_state, led2_state, led3_state);
-    }
+			if (scaled < 33U * full_scale) {
+				color = RGB_RED;
+				color_name = "RED";
+			} else if (scaled <= 66U * full_scale) {
+				color = RGB_YELLOW;
+				color_name = "YELLOW";
+			} else {
+				color = RGB_GREEN;
+				color_name = "GREEN";
+			}
+			rgb_led_set(color);
+			printk("NORMAL: raw ADC=%d/%u, brightness=%u.%02u%%, RGB=%s\n",
+			       sample, full_scale, scaled / full_scale,
+			       (scaled * 100U / full_scale) % 100U, color_name);
+		}
 
-    previous_button = button_state;
+		next_sample += SAMPLE_PERIOD_MS;
+		if (next_sample <= k_uptime_get()) {
+			next_sample = k_uptime_get() + SAMPLE_PERIOD_MS;
+		}
+		k_mutex_unlock(&mode_mutex);
+	}
 }
 
-void ldr_read_task(void)
-{
-    struct adc_sequence sequence = {
-        .buffer = &ldr_sample,
-        .buffer_size = sizeof(ldr_sample),
-    };
-
-    int ret = adc_sequence_init_dt(&ldr, &sequence);
-
-    if (ret < 0) {
-        printk("ADC sequence error: %d\n", ret);
-        return;
-    }
-
-    ret = adc_read_dt(&ldr, &sequence);
-
-    if (ret < 0) {
-        printk("ADC read error: %d\n", ret);
-        return;
-    }
-
-    int adc_value = ldr_sample;
-    int percentage = ((4095 - adc_value) * 100) / 4095;
-
-    printk("LDR ADC: %d | Percentage: %d%%\n",
-           adc_value, percentage);
-
-        if(percentage <= 33){
-            gpio_pin_set_dt(&led1, 1);
-            gpio_pin_set_dt(&led2, 0);
-            gpio_pin_set_dt(&led3, 0);
-        }else if(percentage <= 66 && percentage > 33){
-            gpio_pin_set_dt(&led1, 0);
-            gpio_pin_set_dt(&led2, 1);
-            gpio_pin_set_dt(&led3, 0);
-        }else{
-            gpio_pin_set_dt(&led1, 0);
-            gpio_pin_set_dt(&led2, 0);
-            gpio_pin_set_dt(&led3, 1);
-        }
-}
+K_THREAD_DEFINE(brightness_thread_id, 1536, brightness_thread,
+		NULL, NULL, NULL, 6, 0, 0);
