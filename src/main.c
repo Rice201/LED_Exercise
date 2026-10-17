@@ -1,4 +1,5 @@
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/pm/policy.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/printk.h>
 
@@ -21,6 +22,20 @@ static struct gpio_callback button_callback;
 static atomic_t button_pressed;
 static atomic_t long_press_sent;
 static atomic_t dropped_button_events;
+static bool stop_states_locked;
+
+static void allow_stop_states(bool allow)
+{
+	if (allow && stop_states_locked) {
+		pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE,
+					 PM_ALL_SUBSTATES);
+		stop_states_locked = false;
+	} else if (!allow && !stop_states_locked) {
+		pm_policy_state_lock_get(PM_STATE_SUSPEND_TO_IDLE,
+					 PM_ALL_SUBSTATES);
+		stop_states_locked = true;
+	}
+}
 
 static void queue_button_event(enum button_event event)
 {
@@ -86,10 +101,12 @@ static int button_init(void)
 static void change_mode(enum app_mode mode)
 {
 	k_mutex_lock(&mode_mutex, K_FOREVER);
+	allow_stop_states(false);
 	current_mode = mode;
 	if (mode == MODE_OFF) {
 		rgb_led_set(RGB_OFF);
 		printk("System OFF\n");
+		allow_stop_states(true);
 	} else if (mode == MODE_BLUE) {
 		rgb_led_set(RGB_BLUE);
 		printk("Mode: BLUE - ADC acquisition suspended\n");
@@ -106,6 +123,7 @@ int main(void)
 	int err;
 	enum button_event event;
 
+	allow_stop_states(false);
 	printk("Brightness monitor - NUCLEO-WL55JC\n");
 	err = rgb_led_init();
 	if (err < 0) {
