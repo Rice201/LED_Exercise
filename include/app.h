@@ -26,7 +26,7 @@ int rgb_led_init(void);
 void rgb_led_set(enum rgb_color color);
 
 /* LED on and off*/
-int external_led_init(void);
 void external_led_task(void);
+void ldr_read_task(void);
 
 #endif

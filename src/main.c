@@ -5,15 +5,16 @@
 
 int main(void)
 {
-    int ret = external_led_init();
+    int ret = rgb_led_init();
 
     if (ret < 0) {
-        printk("External LED initialization failed: %d\n", ret);
+        printk("RGB LED initialization failed: %d\n", ret);
         return ret;
     }
 
     while (1) {
         external_led_task();
+        ldr_read_task();
         k_sleep(K_MSEC(20));
     }
 

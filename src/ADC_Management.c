@@ -3,13 +3,15 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/drivers/adc.h>
 
 #include "../include/app.h"
 
 #define BUTTON_NODE DT_ALIAS(sw1)
-#define LED1_NODE    DT_NODELABEL(led_1)
+#define LED1_NODE   DT_NODELABEL(led_1)
 #define LED2_NODE   DT_NODELABEL(led_2)
 #define LED3_NODE   DT_NODELABEL(led_3)
+#define LDR_NODE    DT_PATH(zephyr_user)
 
 static const struct gpio_dt_spec button =
     GPIO_DT_SPEC_GET(BUTTON_NODE, gpios);
@@ -23,13 +25,17 @@ static const struct gpio_dt_spec led2 =
 static const struct gpio_dt_spec led3 =
     GPIO_DT_SPEC_GET(LED3_NODE, gpios);
 
+static const struct adc_dt_spec ldr =
+    ADC_DT_SPEC_GET_BY_IDX(LDR_NODE, 0);
+
+static int16_t ldr_sample;
 static int led1_state;
 static int led2_state;
 static int led3_state;
 static int previous_button;
 static int count;
 
-int external_led_init(void)
+int rgb_led_init(void)
 {
     int ret;
 
@@ -109,4 +115,32 @@ void external_led_task(void)
     }
 
     previous_button = button_state;
+}
+
+void ldr_read_task(void)
+{
+    struct adc_sequence sequence = {
+        .buffer = &ldr_sample,
+        .buffer_size = sizeof(ldr_sample),
+    };
+
+    int ret = adc_sequence_init_dt(&ldr, &sequence);
+
+    if (ret < 0) {
+        printk("ADC sequence error: %d\n", ret);
+        return;
+    }
+
+    ret = adc_read_dt(&ldr, &sequence);
+
+    if (ret < 0) {
+        printk("ADC read error: %d\n", ret);
+        return;
+    }
+
+    int adc_value = ldr_sample;
+    int percentage = ((4095 - adc_value) * 100) / 4095;
+
+    printk("LDR ADC: %d | Percentage: %d%%\n",
+           adc_value, percentage);
 }
