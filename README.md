@@ -8,8 +8,9 @@
 
 A Zephyr RTOS brightness-monitoring and RGB-control application for the
 **NUCLEO-WL55JC**. It uses an external common-anode RGB LED, the onboard B2
-button, and an analogue voltage connected to A0. The analogue source is not
-assumed to be any particular sensor.
+button, and an LDR voltage divider connected to A0. This circuit produces a
+lower ADC voltage under brighter light, so the brightness calculation is
+inverted while the terminal continues to show the unmodified raw ADC value.
 
 ## Operation
 
@@ -56,14 +57,15 @@ The ADC is configured for 12-bit conversion, so its complete code range is
 
 ```text
 full_scale = (1 << 12) - 1 = 4095
-percentage = raw_adc * 100 / 4095
+brightness_code = 4095 - raw_adc
+percentage = brightness_code * 100 / 4095
 ```
 
-| Percentage | Raw 12-bit range | RGB command |
+| Brightness | Raw ADC range for this LDR circuit | RGB command |
 | --- | --- | --- |
-| Below 33% | 0–1351 | RED |
-| 33% through 66% | 1352–2702 | YELLOW (red + green) |
-| Above 66% | 2703–4095 | GREEN |
+| Below 33% | 2744–4095 | RED |
+| 33% through 66% | 1393–2743 | YELLOW (red + green) |
+| Above 66% | 0–1392 | GREEN |
 
 ## Software architecture
 

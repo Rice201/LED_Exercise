@@ -60,7 +60,8 @@ static void brightness_thread(void *p1, void *p2, void *p3)
 			printk("Error: ADC acquisition (%d)\n", err);
 			rgb_led_set(RGB_OFF);
 		} else {
-			uint32_t scaled = (uint32_t)sample * 100U;
+			uint32_t brightness_code = full_scale - (uint32_t)sample;
+			uint32_t scaled = brightness_code * 100U;
 			enum rgb_color color;
 			const char *color_name;
 
