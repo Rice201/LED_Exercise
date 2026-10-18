@@ -8,7 +8,7 @@ project(LED_Exercise)
 target_sources(app PRIVATE
     src/main.c
     src/ADC_Management.c
-    src/Event_Management.c
+    src/Output_Management.c
 )
 
 target_include_directories(app PRIVATE include)
